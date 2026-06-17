@@ -1,74 +1,50 @@
 # edgeful-dash
 
-Small Python CLI for fetching Edgeful report data and saving the complete JSON response.
+`edgeful-dash` is a small Python CLI for requesting Edgeful report data, printing a useful summary, and saving the complete JSON response for later analysis. It currently supports Edgeful's previous-day range report.
 
-## Requirements
+## Quick start
 
-- Python 3.12
-- [`uv`](https://docs.astral.sh/uv/)
-- Edgeful API key from the [Edgeful API dashboard](https://www.edgeful.com/api-dashboard)
-
-## Setup
+You need Python 3.12 or newer, [`uv`](https://docs.astral.sh/uv/), and an Edgeful API key.
 
 ```bash
 uv sync --dev
 cp .env.example .env
 ```
 
-Open `.env` and paste your key after `EDGEFUL_API_KEY=`:
+Set the key in `.env`:
 
 ```dotenv
 EDGEFUL_API_KEY=ef_live_your_key_here
 ```
 
-Edgeful shows the plaintext key once. Do not commit `.env` or paste the key into chat, shell history, screenshots, or logs.
-
-## Usage
-
-Default command:
-
-```bash
-uv run edgeful-dash previous-days-range
-```
-
-Defaults:
-
-- previous day's range
-- `RTY` futures
-- prior 92 completed days
-- `09:30:00` to `16:00:00` in `America/New_York`
-- responses saved under `data/raw/`
-
-Full override example:
+Then request the NQ futures report:
 
 ```bash
 uv run edgeful-dash previous-days-range \
-  --ticker ETHUSDT \
-  --market-type crypto-perp \
+  --ticker NQ \
+  --market-type futures \
   --start-date 2026-03-17 \
-  --end-date 2026-06-16 \
-  --start-time 00:00:00 \
-  --end-time 23:59:59 \
-  --timezone UTC \
-  --output-dir tmp/edgeful
+  --end-date 2026-06-16
 ```
 
-Expected errors are concise and do not print Python tracebacks. Generated JSON files under `data/raw/` are ignored by git.
+Omit the dates to use the default rolling window: 92 days before today through yesterday.
 
-## Tests
+## What it produces
 
-```bash
-uv run pytest
+The command prints the report's available headline metrics and saves the complete JSON object to a deterministic path such as:
+
+```text
+data/raw/previous-days-range_futures_NQ_2026-03-17_2026-06-16.json
 ```
 
-Tests use in-memory HTTP transport and injected clients, so they do not make live Edgeful API calls.
+Files generated under `data/raw/` are ignored by git.
 
-## API Notes
+## Documentation
 
-- Base URL: `https://api.edgeful.com`
-- Authentication: `Authorization: Bearer <EDGEFUL_API_KEY>`
-- `401`: bad or missing API key
-- `403`: authenticated but not entitled to that resource
-- `429`: rate limited after bounded retries
+- [CLI usage and troubleshooting](docs/usage.md)
+- [Development and architecture](docs/development.md)
+- [Edgeful API overview](https://help.edgeful.com/en/articles/15182638-the-edgeful-api-overview-walkthrough)
 
-Current documented limits: 30 requests per 60 seconds, 5 requests per 5 seconds, and 500 requests per hour. Plan entitlements control which reports, tickers, history depth, live access, and detail levels Edgeful returns.
+## Security
+
+Never commit `.env`, API keys, or real API responses. The repository ignores `.env` and generated files under `data/raw/`, but you should still check `git status` before committing.
