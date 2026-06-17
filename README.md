@@ -1,6 +1,6 @@
 # edgeful-dash
 
-`edgeful-dash` is a small Python CLI for requesting Edgeful report data, printing a useful summary, and saving the complete JSON response for later analysis. It currently supports Edgeful's previous-day range report.
+`edgeful-dash` is a small Python CLI for requesting Edgeful report data. It supports both a one-shot current previous-day range snapshot and historical previous-day range statistics.
 
 ## Quick start
 
@@ -17,7 +17,15 @@ Set the key in `.env`:
 EDGEFUL_API_KEY=ef_live_your_key_here
 ```
 
-Then request the NQ futures report:
+Get the current ES previous-day range state:
+
+```bash
+uv run edgeful-dash live-previous-days-range --ticker ES
+```
+
+This consumes the first current event from Edgeful's live stream, prints a concise summary, and saves no response file. Live API access requires Edgeful Pro or All-Access.
+
+For historical NQ statistics:
 
 ```bash
 uv run edgeful-dash previous-days-range \
@@ -27,11 +35,13 @@ uv run edgeful-dash previous-days-range \
   --end-date 2026-06-16
 ```
 
-Omit the dates to use the default rolling window: 92 days before today through yesterday.
+Omit historical dates to use the default rolling window: 92 days before today through yesterday.
 
 ## What it produces
 
-The command prints the report's available headline metrics and saves the complete JSON object to a deterministic path such as:
+The live command prints current market status, contract/as-of metadata, previous-high/low state, and attached historical context without writing a file.
+
+The historical command prints aggregate metrics and saves the complete JSON object to a deterministic path such as:
 
 ```text
 data/raw/previous-days-range_futures_NQ_2026-03-17_2026-06-16.json

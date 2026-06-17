@@ -194,3 +194,142 @@ def test_transport_failure_raises_safe_api_error() -> None:
         == "Edgeful API request failed before a response was received."
     )
     assert "test-key" not in str(exc_info.value)
+
+
+def test_get_sse_event_returns_first_json_data_event_and_closes_response() -> None:
+    captured_response: httpx.Response | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_response
+        assert str(request.url) == f"{BASE_URL}/live/futures/wip?tickers=ES"
+        assert request.headers["Authorization"] == "Bearer test-key"
+        assert request.headers["Accept"] == "text/event-stream"
+        captured_response = httpx.Response(
+            200,
+            text=(
+                ': ping\n\nevent: update\ndata: {"market_status":"market hours"}\n\n'
+                'data: {"ignored":true}\n\n'
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        return captured_response
+
+    client = make_client(handler)
+
+    payload = client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+    assert payload == {"market_status": "market hours"}
+    assert captured_response is not None
+    assert captured_response.is_closed is True
+
+
+def test_get_sse_event_rejects_stream_without_data_event() -> None:
+    client = make_client(
+        lambda _: httpx.Response(
+            200,
+            text=": ping\n\nevent: update\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    with pytest.raises(ResponseFormatError, match="ended before"):
+        client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+
+@pytest.mark.parametrize(
+    ("event", "message"),
+    [
+        ("data: {not json}\n\n", "invalid JSON"),
+        ("data: [1, 2, 3]\n\n", "JSON object"),
+    ],
+)
+def test_get_sse_event_rejects_invalid_data_event(event: str, message: str) -> None:
+    client = make_client(
+        lambda _: httpx.Response(
+            200,
+            text=event,
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    with pytest.raises(ResponseFormatError, match=message):
+        client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_type"),
+    [
+        (401, AuthenticationError),
+        (403, EntitlementError),
+        (500, ApiError),
+    ],
+)
+def test_get_sse_event_maps_http_errors_without_exposing_key(
+    status_code: int,
+    error_type: type[ApiError],
+) -> None:
+    client = make_client(
+        lambda _: httpx.Response(
+            status_code,
+            json={"code": "EDGEFUL_ERROR", "detail": "bad test-key secret"},
+        )
+    )
+
+    with pytest.raises(error_type) as exc_info:
+        client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+    assert "test-key" not in str(exc_info.value)
+
+
+def test_get_sse_event_retries_rate_limits_before_success() -> None:
+    statuses = [429, 429, 200]
+    attempts = 0
+    delays: list[float] = []
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        status_code = statuses[attempts]
+        attempts += 1
+        if status_code == 200:
+            return httpx.Response(
+                200,
+                text='data: {"ok":true}\n\n',
+                headers={"Content-Type": "text/event-stream"},
+            )
+        return httpx.Response(429, json={"detail": "slow down"})
+
+    client = make_client(handler, sleep=delays.append)
+
+    payload = client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+    assert payload == {"ok": True}
+    assert attempts == 3
+    assert delays == [1, 2]
+
+
+def test_get_sse_event_raises_after_three_rate_limits() -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(429, json={"detail": "again"})
+
+    client = make_client(handler, sleep=lambda _: None)
+
+    with pytest.raises(RateLimitError, match="three attempts"):
+        client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+    assert attempts == 3
+
+
+def test_get_sse_event_transport_failure_raises_safe_api_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("network broke for test-key", request=request)
+
+    client = make_client(handler)
+
+    with pytest.raises(ApiError, match="live stream") as exc_info:
+        client.get_sse_event("/live/futures/wip", {"tickers": "ES"})
+
+    assert "test-key" not in str(exc_info.value)

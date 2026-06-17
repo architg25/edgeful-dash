@@ -15,10 +15,17 @@ class FakeClient:
         self.payload = payload or {}
         self.error = error
         self.calls: list[tuple[str, dict[str, str]]] = []
+        self.sse_calls: list[tuple[str, dict[str, str]]] = []
         self.closed = False
 
     def get(self, path: str, params: dict[str, str]) -> dict:
         self.calls.append((path, params))
+        if self.error is not None:
+            raise self.error
+        return self.payload
+
+    def get_sse_event(self, path: str, params: dict[str, str]) -> dict:
+        self.sse_calls.append((path, params))
         if self.error is not None:
             raise self.error
         return self.payload
@@ -278,3 +285,135 @@ def test_parser_and_main_do_not_expose_api_key_option(capsys: pytest.CaptureFixt
     captured = capsys.readouterr()
     assert "api-key" not in captured.out
     assert "EDGEFUL_API_KEY" not in captured.out
+
+
+def test_live_previous_days_range_parser_defaults() -> None:
+    from edgeful_dash.cli import build_parser
+
+    args = build_parser().parse_args(["live-previous-days-range"])
+
+    assert args.ticker == "ES"
+    assert args.market_type == "futures"
+    assert args.session == "NY"
+    assert args.date_range == "6mo"
+
+
+def test_run_executes_live_previous_days_range_without_saving(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from edgeful_dash.cli import run
+
+    payload = {
+        "market_status": "market hours",
+        "futures_contracts": {
+            "ES": {
+                "contract": "ESU6",
+                "as_of": "2026-06-17T14:19:00",
+            }
+        },
+        "ES": {
+            "previous_days_range_standard_default": {
+                "touched_high": True,
+                "touched_low": False,
+                "previous_high": 7570.5,
+                "previous_low": 7514.25,
+                "report_status": "in_play",
+                "historical": {
+                    "startDate": "2025-12-17",
+                    "endDate": "2026-06-16",
+                    "summary": [
+                        {
+                            "category": "previous day high broken",
+                            "frequency": 72,
+                            "percentage": 55,
+                        }
+                    ],
+                },
+            }
+        },
+    }
+    created_clients: list[FakeClient] = []
+
+    def client_factory(api_key: str) -> FakeClient:
+        client = FakeClient(api_key, payload=payload)
+        created_clients.append(client)
+        return client
+
+    monkeypatch.chdir(tmp_path)
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run(
+        ["live-previous-days-range"],
+        environ={"EDGEFUL_API_KEY": "fake-secret-key"},
+        load_environment=lambda: None,
+        client_factory=client_factory,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 0
+    assert stderr.getvalue() == ""
+    assert len(created_clients) == 1
+    client = created_clients[0]
+    assert client.calls == []
+    assert client.sse_calls == [
+        (
+            "/live/futures/wip/report",
+            {
+                "ticker": "ES",
+                "report_key": "previous_days_range_standard",
+                "customization": "default",
+                "session": "NY",
+                "date_range": "6mo",
+            },
+        )
+    ]
+    assert client.closed is True
+
+    output = stdout.getvalue()
+    assert "Market status: market hours" in output
+    assert "Ticker: ES" in output
+    assert "Contract: ESU6" in output
+    assert "Touched previous high: yes" in output
+    assert "Historical previous day high broken: count=72, percentage=55" in output
+    assert "Saved response:" not in output
+    assert "fake-secret-key" not in output
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_run_reports_live_entitlement_error_and_closes_client() -> None:
+    from edgeful_dash.cli import run
+
+    created_clients: list[FakeClient] = []
+
+    def client_factory(api_key: str) -> FakeClient:
+        client = FakeClient(
+            api_key,
+            error=EntitlementError(
+                "Edgeful API denied access to this resource. code=live_data_not_allowed"
+            ),
+        )
+        created_clients.append(client)
+        return client
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run(
+        ["live-previous-days-range", "--ticker", "NQ"],
+        environ={"EDGEFUL_API_KEY": "top-secret"},
+        load_environment=lambda: None,
+        client_factory=client_factory,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 2
+    assert stdout.getvalue() == ""
+    assert "live_data_not_allowed" in stderr.getvalue()
+    assert "Traceback" not in stderr.getvalue()
+    assert "top-secret" not in stderr.getvalue()
+    assert len(created_clients) == 1
+    assert created_clients[0].closed is True

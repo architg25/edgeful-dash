@@ -16,15 +16,17 @@ Tests do not make live Edgeful requests. HTTP behavior is exercised with in-memo
 ```text
 src/edgeful_dash/
 ├── cli.py       # Argument parsing, environment loading, and command orchestration
-├── client.py    # Authentication, HTTP transport, status mapping, and 429 retries
+├── client.py    # JSON/SSE transport, authentication, status mapping, and retries
 ├── errors.py    # User-facing exception hierarchy
+├── live.py      # Live request construction and current-event summaries
 └── reports.py   # Report request construction, summaries, and JSON persistence
 ```
 
 The boundaries are deliberately boring:
 
 - `cli.py` owns process concerns: arguments, streams, exit codes, and dependency wiring.
-- `client.py` owns generic Edgeful HTTP behavior and must not know how a specific report is summarized.
+- `client.py` owns generic Edgeful HTTP behavior, including first-event SSE parsing, and must not know how a specific report is summarized.
+- `live.py` owns current previous-day range request parameters and summary formatting.
 - `reports.py` owns report-specific paths, parameters, normalization, presentation, and filenames.
 - `errors.py` gives the CLI a stable set of expected failures to catch.
 
@@ -34,11 +36,11 @@ Do not turn the client into a generic speculative SDK. Add the report behavior t
 
 1. `cli.run()` parses the command and loads `.env`.
 2. The CLI reads `EDGEFUL_API_KEY` without printing it.
-3. `reports.build_previous_days_range_request()` validates and normalizes request values.
-4. `EdgefulClient.get()` sends the authenticated request and maps API failures.
-5. `reports.save_response()` writes the complete JSON object.
-6. `reports.summarize_previous_days_range()` formats fields that are actually present.
-7. The CLI prints the summary and saved path, or a concise expected error.
+3. The report module validates and normalizes request values.
+4. `EdgefulClient.get()` retrieves historical JSON, or `get_sse_event()` reads the first live SSE event.
+5. Historical commands save the complete JSON object; live commands do not persist the event.
+6. The relevant report module formats fields that are actually present.
+7. The CLI prints the summary, or a concise expected error.
 
 The client owns an internally created `httpx.Client` and closes it after the request. Tests can inject a client and a sleep function to avoid network calls and real retry delays.
 
@@ -48,6 +50,7 @@ The client owns an internally created `httpx.Client` and closes it after the req
 tests/
 ├── test_cli.py       # Argument handling, orchestration, output, and exit codes
 ├── test_client.py    # Authentication, status mapping, redaction, parsing, and retries
+├── test_live.py      # Live request validation and current-event summaries
 └── test_reports.py   # Dates, normalization, request shape, summaries, and persistence
 ```
 
@@ -93,6 +96,7 @@ Before committing:
 ```bash
 uv run pytest
 uv run edgeful-dash --help
+uv run edgeful-dash live-previous-days-range --help
 uv run edgeful-dash previous-days-range --help
 git diff --check
 git status --short

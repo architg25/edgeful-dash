@@ -17,7 +17,55 @@ EDGEFUL_API_KEY=ef_live_your_key_here
 
 The CLI also accepts `EDGEFUL_API_KEY` from the process environment. Do not pass the key as a command-line argument because shell history and process listings can expose it.
 
-## Previous-day range report
+## Live previous-day range
+
+Use this command for current or intraday state:
+
+```bash
+uv run edgeful-dash live-previous-days-range [options]
+```
+
+It connects to Edgeful's single-report live stream, reads the first current event, prints it, and exits. It does not save a response file.
+
+The command requests:
+
+```text
+GET /live/{market_type}/wip/report
+```
+
+with the `previous_days_range_standard` report and default customization.
+
+### Live options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--ticker` | `ES` | Stock or futures ticker. |
+| `--market-type` | `futures` | Live market type: `futures` or `stock`. |
+| `--session` | `NY` | Live session: `NY`, `LONDON`, or `ASIA`. |
+| `--date-range` | `6mo` | Historical context attached to the current event: `3mo` or `6mo`. |
+
+Example:
+
+```bash
+uv run edgeful-dash live-previous-days-range \
+  --ticker ES \
+  --market-type futures \
+  --session NY \
+  --date-range 6mo
+```
+
+When present, output includes:
+
+- market status;
+- ticker, active futures contract, and as-of timestamp;
+- whether today's price has touched the previous high or low;
+- previous-day high and low values;
+- report status, bias, and context;
+- historical date range and summary probabilities.
+
+Live data requires an Edgeful Pro or All-Access plan. A key without live entitlement returns HTTP `403`.
+
+## Historical previous-day range
 
 ```bash
 uv run edgeful-dash previous-days-range [options]
@@ -105,7 +153,7 @@ These examples show valid request syntax. Whether a ticker and date range return
 
 Session values are sent directly to Edgeful. The CLI does not attempt to interpret holidays, daylight-saving changes, or exchange calendars.
 
-## Output
+## Historical output
 
 When present in the response, the CLI prints:
 
@@ -156,5 +204,6 @@ Account entitlements may impose additional restrictions on reports, tickers, his
 
 ```bash
 uv run edgeful-dash --help
+uv run edgeful-dash live-previous-days-range --help
 uv run edgeful-dash previous-days-range --help
 ```

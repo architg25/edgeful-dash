@@ -63,22 +63,45 @@ class EdgefulClient:
                 self._sleep(attempt)
                 continue
 
-            if response.status_code == 401:
-                raise AuthenticationError("Edgeful API rejected the configured API key.")
-
-            if response.status_code == 403:
-                detail = self._safe_detail(response, api_key)
-                raise EntitlementError(
-                    f"Edgeful API denied access to this resource. {detail}".strip()
-                )
-
-            if response.status_code >= 400:
-                detail = self._safe_detail(response, api_key)
-                raise ApiError(
-                    f"Edgeful API request failed with status {response.status_code}. {detail}".strip()
-                )
-
+            self._raise_for_status(response, api_key)
             return self._parse_object_response(response)
+
+        raise AssertionError("Unreachable")
+
+    def get_sse_event(self, path: str, params: Mapping[str, str]) -> dict[str, Any]:
+        api_key = self._validated_api_key()
+        headers = {
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {api_key}",
+        }
+
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            retry = False
+            try:
+                with self._client.stream(
+                    "GET",
+                    self._build_url(path),
+                    params=dict(params),
+                    headers=headers,
+                ) as response:
+                    if response.status_code == 429:
+                        if attempt == _MAX_ATTEMPTS:
+                            raise RateLimitError(
+                                "Edgeful API rate limit persisted after three attempts."
+                            )
+                        retry = True
+                    else:
+                        if response.status_code >= 400:
+                            response.read()
+                        self._raise_for_status(response, api_key)
+                        return self._parse_sse_object(response)
+            except httpx.RequestError as error:
+                raise ApiError(
+                    "Edgeful API live stream failed before a complete event was received."
+                ) from error
+
+            if retry:
+                self._sleep(attempt)
 
         raise AssertionError("Unreachable")
 
@@ -106,6 +129,45 @@ class EdgefulClient:
                 "Edgeful API returned an invalid response; expected a JSON object."
             )
         return payload
+
+    def _parse_sse_object(self, response: httpx.Response) -> dict[str, Any]:
+        for line in response.iter_lines():
+            if not line.startswith("data:"):
+                continue
+            raw_payload = line[5:].lstrip()
+            if not raw_payload:
+                continue
+            try:
+                payload = json.loads(raw_payload)
+            except json.JSONDecodeError as error:
+                raise ResponseFormatError(
+                    "Edgeful API live stream returned invalid JSON."
+                ) from error
+            if not isinstance(payload, dict):
+                raise ResponseFormatError(
+                    "Edgeful API live stream returned an invalid event; "
+                    "expected a JSON object."
+                )
+            return payload
+        raise ResponseFormatError(
+            "Edgeful API live stream ended before returning a JSON data event."
+        )
+
+    def _raise_for_status(self, response: httpx.Response, api_key: str) -> None:
+        if response.status_code == 401:
+            raise AuthenticationError("Edgeful API rejected the configured API key.")
+
+        if response.status_code == 403:
+            detail = self._safe_detail(response, api_key)
+            raise EntitlementError(
+                f"Edgeful API denied access to this resource. {detail}".strip()
+            )
+
+        if response.status_code >= 400:
+            detail = self._safe_detail(response, api_key)
+            raise ApiError(
+                f"Edgeful API request failed with status {response.status_code}. {detail}".strip()
+            )
 
     def _safe_detail(self, response: httpx.Response, api_key: str) -> str:
         detail = ""
