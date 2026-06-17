@@ -2,7 +2,21 @@
 
 ## Setup
 
-Install dependencies and create the local environment file:
+`uv` installs the required Python version when necessary.
+
+### Windows PowerShell
+
+```powershell
+winget install --id=Git.Git -e
+winget install --id=astral-sh.uv -e
+git clone https://github.com/architg25/edgeful-dash.git
+Set-Location edgeful-dash
+uv sync --dev
+Copy-Item .env.example .env
+notepad .env
+```
+
+### macOS and Linux
 
 ```bash
 uv sync --dev
@@ -91,6 +105,7 @@ It sends the date range, session times, and timezone as query parameters.
 | `--end-time` | `16:00:00` | Session end time sent to Edgeful. |
 | `--timezone` | `America/New_York` | IANA timezone used for the session. |
 | `--output-dir` | `data/raw` | Directory for the complete JSON response. |
+| `--no-save` | `false` | Print the summary without writing the complete JSON response. |
 
 The start date cannot be after the end date. The CLI validates date formatting locally; Edgeful validates ticker availability, market access, history depth, and session support.
 
@@ -144,6 +159,15 @@ uv run edgeful-dash previous-days-range \
 
 These examples show valid request syntax. Whether a ticker and date range return data depends on the Edgeful plan and available history.
 
+### PowerShell without persistence
+
+The same CLI syntax works natively in PowerShell. Use a single line instead of
+Bash line continuations:
+
+```powershell
+uv run edgeful-dash previous-days-range --ticker ES --market-type futures --no-save
+```
+
 ## Session behavior
 
 - Futures commonly use `09:30:00` through `16:00:00` in `America/New_York`.
@@ -160,9 +184,12 @@ When present in the response, the CLI prints:
 - requested date range;
 - previous-day high and low counts and percentages;
 - green/red close breakdowns after high or low breaks;
-- the path of the saved response.
+- when persistence is enabled, the path of the saved response.
 
-The saved filename is:
+Saving is the default for backward compatibility. Pass `--no-save` to print the
+summary without creating an output directory or JSON file.
+
+When persistence is enabled, the saved filename is:
 
 ```text
 previous-days-range_{market_type}_{ticker}_{start_date}_{end_date}.json

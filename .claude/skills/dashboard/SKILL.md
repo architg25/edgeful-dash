@@ -124,7 +124,11 @@ execute these steps in order. copy the checklist into your response and check of
 7. **assemble html.** read in this order: `references/design-tokens.md` → `references/layout-patterns.md` → `references/chart-recipes.md`. compose: page shell → header → zones (each with subsections, each labeled with its source report) → footer. inline all CSS and JS in one file.
 8. **write `dashboard.html`** — single file, no external assets except CDNs.
 9. **distribute:**
-   - **claude code cli:** run `open output/YYYY.MM.DD-{slug}/dashboard.html` (macOS). the file opens in the default browser. report the absolute path.
+   - **claude code cli:** open the generated file with the command for the current platform:
+     - Windows PowerShell: `Start-Process output/YYYY.MM.DD-{slug}/dashboard.html`
+     - macOS: `open output/YYYY.MM.DD-{slug}/dashboard.html`
+     - Linux: `xdg-open output/YYYY.MM.DD-{slug}/dashboard.html`
+     report the absolute path after opening it.
    - **claude.ai web app or claude desktop:** return the HTML content as a downloadable artifact in the chat. tell the user to click the file to open it in their browser.
    - detect environment: if you have file-write tools AND the project has an `output/` folder, write to disk. otherwise return as artifact.
 10. **run qa checklist** (next section). fix any failures before declaring done.
@@ -136,7 +140,10 @@ execute these steps in order. copy the checklist into your response and check of
 - **cli:** `output/YYYY.MM.DD-{slug}/dashboard.html` (matches the workspace output convention)
   - slug rules: lowercase, hyphens for spaces, no punctuation. examples: `ib-orb-joint-es-2024`, `gap-fill-spy-q4`, `nfp-performance-nq`
   - one folder per dashboard. reuse the folder if it already exists.
-  - after write, run `open {path}` on macOS to launch the browser
+  - after writing, open the file with the command for the current platform only:
+    - Windows PowerShell: `Start-Process {path}`
+    - macOS: `open {path}`
+    - Linux: `xdg-open {path}`
 - **claude.ai / claude desktop:** return HTML as artifact. user clicks → opens in browser. mention this explicitly so non-technical users know what to do.
 - **all environments:** the HTML is fully self-contained. Tailwind, Chart.js, and Poppins load from public CDNs. no build step, no asset folder, no localhost dependencies. users can email the file, host it on any static service, or open it offline (with degraded styling — fonts and Tailwind need internet).
 

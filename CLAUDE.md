@@ -7,10 +7,8 @@ Python CLI for Edgeful market data. Detailed guidance lives in `README.md`,
 
 Use live data for requests containing current, today, live, or in-play:
 
-```bash
-uv run edgeful-dash live-previous-days-range \
-  --ticker ES \
-  --market-type futures
+```text
+uv run edgeful-dash live-previous-days-range --ticker ES --market-type futures
 ```
 
 The live command reads one SSE event and saves nothing. Report Edgeful's exact
@@ -18,17 +16,13 @@ market status and as-of timestamp.
 
 Use historical data for probabilities, comparisons, or date ranges:
 
-```bash
-mktemp -d
-uv run edgeful-dash previous-days-range \
-  --ticker ES \
-  --market-type futures \
-  --output-dir <returned-temp-directory>
+```text
+uv run edgeful-dash previous-days-range --ticker ES --market-type futures --no-save
 ```
 
 The default range is 92 days ago through yesterday. Use `--start-date` and
-`--end-date` only for a requested period. Delete temporary responses after
-reading them and verify that `data/raw/` still contains only `.gitkeep`.
+`--end-date` only for a requested period. Verify that `data/raw/` still
+contains only `.gitkeep`.
 
 Defaults are futures, ticker `ES`, and the New York session. Ask when the
 ticker, market, period, or session is materially ambiguous. Never fabricate

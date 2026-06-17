@@ -60,6 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
     previous_days_range.add_argument("--end-time", default="16:00:00")
     previous_days_range.add_argument("--timezone", default="America/New_York")
     previous_days_range.add_argument("--output-dir", type=Path, default=Path("data/raw"))
+    previous_days_range.add_argument(
+        "--no-save",
+        action="store_true",
+        help="print the summary without writing the complete JSON response",
+    )
 
     live_previous_days_range = subparsers.add_parser("live-previous-days-range")
     live_previous_days_range.add_argument("--ticker", default="ES")
@@ -142,25 +147,27 @@ def run(
         finally:
             client.close()
 
+        saved_path: Path | None = None
         if is_live:
             summary_lines = summarize_live_previous_days_range(
                 payload,
                 ticker=args.ticker,
             )
         else:
-            saved_path = save_response(
-                payload,
-                output_dir=args.output_dir,
-                market_type=args.market_type,
-                ticker=args.ticker,
-                start_date=start_date,
-                end_date=end_date,
-            )
             summary_lines = summarize_previous_days_range(payload)
+            if not args.no_save:
+                saved_path = save_response(
+                    payload,
+                    output_dir=args.output_dir,
+                    market_type=args.market_type,
+                    ticker=args.ticker,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
 
         for line in summary_lines:
             print(line, file=stdout)
-        if not is_live:
+        if not is_live and saved_path is not None:
             print(f"Saved response: {saved_path}", file=stdout)
     except (EdgefulError, OSError, ValueError) as error:
         print(str(error), file=stderr)

@@ -62,6 +62,14 @@ def test_run_returns_2_when_api_key_is_missing() -> None:
     assert stdout.getvalue() == ""
 
 
+def test_previous_days_range_parser_defaults_to_saving() -> None:
+    from edgeful_dash.cli import build_parser
+
+    args = build_parser().parse_args(["previous-days-range"])
+
+    assert args.no_save is False
+
+
 def test_run_executes_default_previous_days_range_command(tmp_path: Path) -> None:
     from edgeful_dash.cli import run
 
@@ -119,6 +127,50 @@ def test_run_executes_default_previous_days_range_command(tmp_path: Path) -> Non
     saved_files = list(tmp_path.glob("*.json"))
     assert len(saved_files) == 1
     assert f"Saved response: {saved_files[0]}" in output
+
+
+def test_run_historical_no_save_prints_summary_without_writing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from edgeful_dash.cli import run
+
+    payload = {
+        "startDate": "2026-03-17",
+        "endDate": "2026-06-16",
+        "summary": {
+            "prevDayHigh": {"count": 31, "percentage": 52.5},
+            "prevDayLow": {"count": 28, "percentage": 47.5},
+        },
+    }
+    created_clients: list[FakeClient] = []
+
+    def client_factory(api_key: str) -> FakeClient:
+        client = FakeClient(api_key, payload=payload)
+        created_clients.append(client)
+        return client
+
+    monkeypatch.chdir(tmp_path)
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run(
+        ["previous-days-range", "--no-save"],
+        environ={"EDGEFUL_API_KEY": "fake-secret-key"},
+        load_environment=lambda: None,
+        client_factory=client_factory,
+        stdout=stdout,
+        stderr=stderr,
+        today=date(2026, 6, 17),
+    )
+
+    assert exit_code == 0
+    assert stderr.getvalue() == ""
+    assert created_clients[0].closed is True
+    assert "Previous-day high: count=31, percentage=52.5" in stdout.getvalue()
+    assert "Previous-day low: count=28, percentage=47.5" in stdout.getvalue()
+    assert "Saved response:" not in stdout.getvalue()
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_run_rejects_reversed_explicit_dates_before_client_get(tmp_path: Path) -> None:

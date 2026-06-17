@@ -38,7 +38,7 @@ Do not turn the client into a generic speculative SDK. Add the report behavior t
 2. The CLI reads `EDGEFUL_API_KEY` without printing it.
 3. The report module validates and normalizes request values.
 4. `EdgefulClient.get()` retrieves historical JSON, or `get_sse_event()` reads the first live SSE event.
-5. Historical commands save the complete JSON object; live commands do not persist the event.
+5. Historical commands save the complete JSON object by default and skip persistence with `--no-save`; live commands do not persist the event.
 6. The relevant report module formats fields that are actually present.
 7. The CLI prints the summary, or a concise expected error.
 
@@ -59,6 +59,9 @@ Run everything:
 ```bash
 uv run pytest
 ```
+
+GitHub Actions runs the same suite and CLI help smoke checks on
+`windows-latest` and `ubuntu-latest`. CI does not use an Edgeful API key.
 
 Run one module while developing:
 
