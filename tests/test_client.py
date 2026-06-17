@@ -56,6 +56,27 @@ def test_get_builds_url_sets_auth_headers_and_returns_json_object() -> None:
     assert response == {"ok": True}
 
 
+def test_close_closes_owned_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    http_client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200)))
+    monkeypatch.setattr("edgeful_dash.client.httpx.Client", lambda: http_client)
+
+    client = EdgefulClient(api_key="test-key")
+
+    client.close()
+
+    assert http_client.is_closed is True
+
+
+def test_close_leaves_injected_http_client_open() -> None:
+    http_client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200)))
+    client = EdgefulClient(api_key="test-key", client=http_client)
+
+    client.close()
+
+    assert http_client.is_closed is False
+    http_client.close()
+
+
 @pytest.mark.parametrize(
     ("status_code", "error_type"),
     [

@@ -29,8 +29,13 @@ class EdgefulClient:
         sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._api_key = api_key
-        self._client = client or httpx.Client()
+        self._owns_client = client is None
+        self._client = client if client is not None else httpx.Client()
         self._sleep = sleep or time.sleep
+
+    def close(self) -> None:
+        if self._owns_client:
+            self._client.close()
 
     def get(self, path: str, params: Mapping[str, str]) -> dict[str, Any]:
         api_key = self._validated_api_key()
