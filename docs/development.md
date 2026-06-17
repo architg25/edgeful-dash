@@ -60,9 +60,6 @@ Run everything:
 uv run pytest
 ```
 
-GitHub Actions runs the same suite and CLI help smoke checks on
-`windows-latest` and `ubuntu-latest`. CI does not use an Edgeful API key.
-
 Run one module while developing:
 
 ```bash
